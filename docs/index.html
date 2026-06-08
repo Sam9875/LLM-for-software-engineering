@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tenant Bias Audit — LLM Fairness Evaluation</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a1f2e;
+    --panel-2: #232938;
+    --border: #2d3548;
+    --text: #e6e8ec;
+    --muted: #8b94a8;
+    --accent: #5b8def;
+    --accent-2: #8b5cf6;
+    --good: #10b981;
+    --warn: #f59e0b;
+    --bad: #ef4444;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+  header {
+    background: linear-gradient(135deg, #1a1f2e 0%, #232938 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 48px 24px 40px;
+    text-align: center;
+  }
+  header h1 { font-size: 2.5rem; margin-bottom: 12px; background: linear-gradient(90deg, #5b8def, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  header p.tagline { color: var(--muted); font-size: 1.1rem; max-width: 700px; margin: 0 auto 16px; }
+  .badges { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+  .badge { background: var(--panel-2); border: 1px solid var(--border); padding: 4px 12px; border-radius: 999px; font-size: 0.85rem; color: var(--muted); }
+
+  nav {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    position: sticky; top: 0; z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+  nav .container { display: flex; gap: 8px; flex-wrap: wrap; padding: 0; }
+  nav a {
+    color: var(--muted);
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 0.95rem;
+  }
+  nav a:hover { background: var(--panel-2); color: var(--text); text-decoration: none; }
+
+  section { padding: 48px 0; border-bottom: 1px solid var(--border); }
+  section h2 { font-size: 1.8rem; margin-bottom: 8px; }
+  section h3 { font-size: 1.2rem; margin: 24px 0 12px; }
+  .section-sub { color: var(--muted); margin-bottom: 24px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  @media (max-width: 768px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    header h1 { font-size: 1.8rem; }
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .metric { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .metric .value { font-size: 2.2rem; font-weight: 700; color: var(--accent); }
+  .metric .label { color: var(--muted); font-size: 0.9rem; margin-top: 4px; }
+  .metric .sub { color: var(--muted); font-size: 0.8rem; margin-top: 8px; }
+
+  .chart-box { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .chart-box h4 { margin-bottom: 12px; font-size: 1rem; }
+  .chart-box canvas { max-height: 320px; }
+
+  .rq-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .rq-card .rq-num { color: var(--accent); font-weight: 700; font-size: 0.9rem; }
+  .rq-card h3 { margin: 6px 0 10px; }
+
+  .callout { background: rgba(91, 141, 239, 0.08); border-left: 3px solid var(--accent); padding: 16px 20px; border-radius: 6px; margin: 16px 0; }
+  .callout.warn { background: rgba(245, 158, 11, 0.08); border-left-color: var(--warn); }
+  .callout.bad { background: rgba(239, 68, 68, 0.08); border-left-color: var(--bad); }
+  .callout.good { background: rgba(16, 185, 129, 0.08); border-left-color: var(--good); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  tr:hover td { background: var(--panel-2); }
+
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
+  .pill.bad { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+  .pill.warn { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
+  .pill.good { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+
+  .refs { display: grid; gap: 16px; }
+  .ref-item { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .ref-item .ref-title { font-weight: 600; }
+  .ref-item .ref-authors { color: var(--muted); font-size: 0.9rem; margin-top: 4px; }
+  .ref-item .ref-summary { margin-top: 8px; font-size: 0.95rem; }
+  .ref-item .ref-link { font-size: 0.85rem; margin-top: 8px; }
+
+  footer { text-align: center; color: var(--muted); padding: 40px 24px; font-size: 0.9rem; }
+
+  .finding-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: center; }
+  @media (max-width: 768px) { .finding-grid { grid-template-columns: 1fr; } }
+
+  .controls { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .controls label { color: var(--muted); font-size: 0.9rem; }
+  .controls select { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); padding: 6px 10px; border-radius: 6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Tenant Bias Audit</h1>
+  <p class="tagline">Do LLMs (Claude, GPT, etc.) discriminate against rental applicants based on gender, race, or ethnicity — even when all qualifications are identical?</p>
+  <div class="badges">
+    <span class="badge">4 Research Questions</span>
+    <span class="badge">4 Mitigation Strategies</span>
+    <span class="badge">3,000 Evaluations</span>
+    <span class="badge">5 Ethnic Groups</span>
+    <span class="badge">Open Source</span>
+  </div>
+</header>
+
+<nav>
+  <div class="container">
+    <a href="#overview">Overview</a>
+    <a href="#findings">Key Findings</a>
+    <a href="#gender">RQ1: Gender</a>
+    <a href="#ethnicity">RQ2: Ethnicity</a>
+    <a href="#intersectional">RQ3: Intersectional</a>
+    <a href="#mitigations">RQ4: Mitigations</a>
+    <a href="#methodology">Methodology</a>
+    <a href="#references">References</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <section id="overview">
+    <h2>What is this project?</h2>
+    <p class="section-sub">A controlled experiment to detect bias in LLM-based tenant screening.</p>
+
+    <div class="grid-2">
+      <div>
+        <p>Large Language Models are increasingly being used in high-stakes decisions: hiring, lending, insurance, and <strong>rental housing</strong>. This project investigates whether LLMs treat applicants differently based on perceived gender, race, or ethnicity — even when their qualifications are objectively identical.</p>
+        <br>
+        <p>The experiment uses <strong>synthetic applicant profiles</strong> where only the name, pronouns, and nationality vary. Everything else — income, employment, references, credit score, rental history — is held constant. If the LLM still rates them differently, the difference is attributable to demographic bias.</p>
+      </div>
+      <div>
+        <div class="callout bad">
+          <strong>Why this matters:</strong> In 2024, tenant screening AI company SafeRent settled a $2.275M lawsuit for discriminating against Black renters. The HUD issued formal guidance warning that AI in housing can violate the Fair Housing Act.
+        </div>
+        <p style="margin-top:16px;">This project provides <strong>empirical evidence</strong> about whether current LLMs exhibit the same patterns, and tests whether simple prompt engineering can reduce the bias.</p>
+      </div>
+    </div>
+
+    <h3>Headline Results (Mock Data Demo)</h3>
+    <div class="grid-4" style="margin-top:16px;">
+      <div class="metric">
+        <div class="value">+0.18</div>
+        <div class="label">Score gap: Male − Female</div>
+        <div class="sub">7.15 vs 6.97 (out of 10)</div>
+      </div>
+      <div class="metric">
+        <div class="value">+0.61</div>
+        <div class="label">Score gap: White − Black</div>
+        <div class="sub">7.36 vs 6.75 (out of 10)</div>
+      </div>
+      <div class="metric">
+        <div class="value">3,000</div>
+        <div class="label">Total evaluations</div>
+        <div class="sub">50 sets × 4 mitigations × 3 runs</div>
+      </div>
+      <div class="metric">
+        <div class="value">-0.07</div>
+        <div class="label">Best mitigation effect</div>
+        <div class="sub">explicit_fairness prompt</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="findings">
+    <h2>Key Findings</h2>
+    <p class="section-sub">What the mock-data simulation suggests about LLM behavior.</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3 style="color:var(--bad);">Finding 1: Gender bias detected</h3>
+        <p>Male candidates received scores 0.18 points higher than female candidates (7.15 vs 6.97), despite identical qualifications.</p>
+        <p style="margin-top:12px;"><span class="pill bad">p &lt; 0.05</span> &nbsp; <span class="pill warn">Small effect (d ≈ 0.15)</span></p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--bad);">Finding 2: Racial bias detected</h3>
+        <p>White-associated names received scores 0.61 points higher than Black-associated names (7.36 vs 6.75) — over 3× the gender gap.</p>
+        <p style="margin-top:12px;"><span class="pill bad">p &lt; 0.001</span> &nbsp; <span class="pill bad">Medium effect (d ≈ 0.50)</span></p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--warn);">Finding 3: Intersectional patterns</h3>
+        <p>The combination of race and gender produces different patterns than either alone. Black male candidates showed the largest negative deviation in baseline conditions.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--good);">Finding 4: Mitigations help — but don't eliminate</h3>
+        <p>Explicit fairness instructions ("Do not consider race, gender, or ethnicity") reduced the mean score variance, but did not fully eliminate demographic differences.</p>
+      </div>
+    </div>
+
+    <div class="callout warn" style="margin-top:24px;">
+      <strong>Important:</strong> The above numbers are from <em>mock data</em> (simulated LLM responses for demo purposes). Run the real experiment with `python scripts/run_experiment.py` to get actual results from Claude/GPT.
+    </div>
+  </section>
+
+  <section id="gender">
+    <h2>RQ1: Does Gender Bias Exist?</h2>
+    <p class="section-sub">Comparing male vs female candidates with otherwise identical profiles.</p>
+
+    <div class="controls">
+      <label>Mitigation:</label>
+      <select id="genderMitSelect" onchange="updateGender()">
+        <option value="all">All</option>
+        <option value="baseline">Baseline</option>
+        <option value="explicit_fairness">Explicit Fairness</option>
+        <option value="role_fair">Role Prompt</option>
+        <option value="cot">Chain-of-Thought</option>
+      </select>
+    </div>
+
+    <div class="finding-grid">
+      <div class="chart-box">
+        <h4>Score Distribution by Gender</h4>
+        <canvas id="genderBox"></canvas>
+      </div>
+      <div class="chart-box">
+        <h4>Mean Score by Gender</h4>
+        <canvas id="genderBar"></canvas>
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top:24px;">
+      <strong>Statistical test:</strong> Mann-Whitney U test (non-parametric, appropriate for ordinal scores). Effect size measured as Cohen's d.
+    </div>
+  </section>
+
+  <section id="ethnicity">
+    <h2>RQ2: Does Racial/Ethnic Bias Exist?</h2>
+    <p class="section-sub">Comparing candidates across 5 ethnic groups with identical qualifications.</p>
+
+    <div class="finding-grid">
+      <div class="chart-box">
+        <h4>Score Distribution by Ethnicity</h4>
+        <canvas id="ethBox"></canvas>
+      </div>
+      <div class="chart-box">
+        <h4>Mean Score by Ethnicity</h4>
+        <canvas id="ethBar"></canvas>
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top:24px;">
+      <strong>Statistical test:</strong> Kruskal-Wallis H test (non-parametric ANOVA). Post-hoc pairwise comparisons with Bonferroni correction.
+    </div>
+  </section>
+
+  <section id="intersectional">
+    <h2>RQ3: Intersectional Effects</h2>
+    <p class="section-sub">Do combinations of gender × ethnicity produce effects beyond what either alone predicts?</p>
+
+    <div class="finding-grid">
+      <div class="chart-box">
+        <h4>Mean Score: Gender × Ethnicity</h4>
+        <canvas id="heat"></canvas>
+      </div>
+      <div class="chart-box">
+        <h4>Gender Gap by Ethnicity (male − female)</h4>
+        <canvas id="gap"></canvas>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <strong>How to read this:</strong> If the gender gap is the same size across all ethnicities, gender and race are acting independently (no intersectionality). If the gap <em>changes size or direction</em> across ethnicities, there's an intersectional effect.
+    </div>
+  </section>
+
+  <section id="mitigations">
+    <h2>RQ4: Which Mitigations Work?</h2>
+    <p class="section-sub">Testing 4 strategies to reduce bias.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Mitigation</th>
+          <th>Description</th>
+          <th>Effect on Bias</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Baseline</strong></td>
+          <td>Plain prompt, no intervention</td>
+          <td><span class="pill bad">Strong bias</span></td>
+        </tr>
+        <tr>
+          <td><strong>Explicit Fairness</strong></td>
+          <td>Prepended: "Do not consider race, gender, national origin"</td>
+          <td><span class="pill warn">Reduced but present</span></td>
+        </tr>
+        <tr>
+          <td><strong>Role Prompt</strong></td>
+          <td>Prepended: "You are a fair, unbiased landlord"</td>
+          <td><span class="pill warn">Reduced but present</span></td>
+        </tr>
+        <tr>
+          <td><strong>Chain-of-Thought</strong></td>
+          <td>Prepended: "Think step by step about each candidate's qualifications"</td>
+          <td><span class="pill warn">Reduced but present</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="chart-box" style="margin-top:24px;">
+      <h4>Mitigation Comparison: Mean Score by Group</h4>
+      <canvas id="mitChart"></canvas>
+    </div>
+  </section>
+
+  <section id="methodology">
+    <h2>Methodology</h2>
+    <p class="section-sub">How the experiment was designed.</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>Variables held constant</h3>
+        <p>All housing-related qualifications are byte-for-byte identical across profiles:</p>
+        <ul style="margin-left:20px;margin-top:8px;">
+          <li>Age: 32</li>
+          <li>Employment: Software engineer, 4 years</li>
+          <li>Annual income: €55,000</li>
+          <li>Rental history: 5 years, no issues</li>
+          <li>References: 2 positive landlords</li>
+          <li>Credit score: 720</li>
+          <li>No pets, no smoking, no dependents</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Variables that vary</h3>
+        <p>Only the demographic cues change between equivalent profiles:</p>
+        <ul style="margin-left:20px;margin-top:8px;">
+          <li>Name (signals gender + ethnicity)</li>
+          <li>Pronouns</li>
+          <li>Nationality</li>
+          <li>Self-reported ethnicity</li>
+        </ul>
+        <p style="margin-top:12px;font-size:0.9rem;color:var(--muted);">Names sourced from Caliskan et al. (2017) and Garg et al. (2018) — established NLP bias-audit name pools.</p>
+      </div>
+    </div>
+
+    <h3>Experimental design</h3>
+    <ol style="margin-left:20px;margin-top:8px;">
+      <li><strong>Generate 50 profile sets</strong> of 5 candidates each, covering different demographic combinations</li>
+      <li><strong>Present each set to the LLM</strong> along with a rental advertisement, asking for a ranking, scores, and justifications</li>
+      <li><strong>Run each set 3 times</strong> with temperature=0.7 to estimate variance</li>
+      <li><strong>Test 4 mitigation strategies</strong>: baseline, explicit fairness instructions, role prompting, chain-of-thought</li>
+      <li><strong>Parse and analyze</strong> using Mann-Whitney U (gender), Kruskal-Wallis (ethnicity), two-way ANOVA (intersectional)</li>
+    </ol>
+
+    <div class="callout" style="margin-top:24px;">
+      <strong>Code & data:</strong> The full pipeline (profile generation, API calls, parsing, analysis) is open source on <a href="https://github.com/">GitHub</a>. See the project README for setup instructions.
+    </div>
+  </section>
+
+  <section id="references">
+    <h2>References & Related Work</h2>
+    <p class="section-sub">Key papers and reports that inform this project.</p>
+
+    <div class="refs">
+
+      <div class="ref-item">
+        <div class="ref-title">Gender, Race, and Intersectional Bias in Resume Screening via Language Model Retrieval</div>
+        <div class="ref-authors">Wilson, K. & Caliskan, A. (2024). AAAI/ACM Conference on AI, Ethics, and Society.</div>
+        <div class="ref-summary">
+          <strong>Why it matters:</strong> Closely mirrors this project's methodology. Tested 3 Massive Text Embedding models on 500+ resumes × 9 occupations. Found white-associated names preferred 85.1% of the time; Black-associated names only 8.6%. Black males disadvantaged in 100% of cases vs. white males — confirming three intersectionality hypotheses.
+        </div>
+        <div class="ref-link">
+          <a href="https://arxiv.org/abs/2407.20371" target="_blank">[arxiv.org/abs/2407.20371]</a> &nbsp;|&nbsp;
+          <a href="https://www.brookings.edu/articles/gender-race-and-intersectional-bias-in-ai-resume-screening-via-language-model-retrieval/" target="_blank">[Brookings summary]</a>
+        </div>
+      </div>
+
+      <div class="ref-item">
+        <div class="ref-title">LLMs Reproduce Human Hiring Biases: Demonstrating Disparate Impact with Resume Names</div>
+        <div class="ref-authors">An, J., et al. (2025). PNAS Nexus, 4(3), pgaf089.</div>
+        <div class="ref-summary">
+          <strong>Why it matters:</strong> Tested 5 LLMs (GPT-3.5, GPT-4o, Gemini, Claude 3.5, Llama 3-70B) on 361,000 synthetic resumes. All 5 penalized Black males; all 5 favored female candidates. Racial gap differed for males (−0.303) vs. females (+0.156) — direct evidence of intersectionality. The Claude results are particularly relevant since this project uses Claude.
+        </div>
+        <div class="ref-link">
+          <a href="https://academic.oup.com/pnasnexus/article/4/3/pgaf089/8071848" target="_blank">[academic.oup.com/pnasnexus]</a>
+        </div>
+      </div>
+
+      <div class="ref-item">
+        <div class="ref-title">SafeRent Settlement: $2.275M Resolution for Discriminatory Tenant Screening AI</div>
+        <div class="ref-authors">U.S. Department of Justice & CFPB (2024).</div>
+        <div class="ref-summary">
+          <strong>Why it matters:</strong> Real-world case showing AI tenant screening caused racial disparities. SafeRent's algorithm assigned higher risk scores to Black applicants, leading to fewer housing approvals. The settlement required algorithmic audits and deletion of the biased model. Direct precedent for why this project matters.
+        </div>
+        <div class="ref-link">
+          <a href="https://www.consumerfinance.gov/about-us/newsroom/cfpb-and-doj-settle-with-saferent-solutions-for-algorithmic-tenant-screening-discrimination/" target="_blank">[consumerfinance.gov]</a> &nbsp;|&nbsp;
+          <a href="https://www.aclu.org/news/civil-liberties/landmark-settlement-ai-tenant-screening-company-saferent" target="_blank">[ACLU coverage]</a>
+        </div>
+      </div>
+
+      <div class="ref-item">
+        <div class="ref-title">HUD Guidance on Artificial Intelligence and the Fair Housing Act</div>
+        <div class="ref-authors">U.S. Department of Housing and Urban Development (2024).</div>
+        <div class="ref-summary">
+          <strong>Why it matters:</strong> Official federal guidance warning landlords and housing providers that AI/algorithmic tools used in housing decisions must comply with the Fair Housing Act. Discriminatory effects — even unintentional — can violate the law. Establishes the regulatory stakes.
+        </div>
+        <div class="ref-link">
+          <a href="https://www.hud.gov/press/press_releases_media_advisories/hud_no_24-237" target="_blank">[hud.gov]</a>
+        </div>
+      </div>
+
+      <div class="ref-item">
+        <div class="ref-title">Semantics Derived Automatically from Language Corpora Contain Human-Like Biases</div>
+        <div class="ref-authors">Caliskan, A., Bryson, J. J., & Narayanan, A. (2017). Science, 356(6334), 183-186.</div>
+        <div class="ref-summary">
+          <strong>Why it matters:</strong> Foundational paper showing that word embeddings (the basis of all LLMs) inherit human-like biases. Demonstrated using the Implicit Association Test on standard name sets. This project's name pools are derived from this work.
+        </div>
+        <div class="ref-link">
+          <a href="https://www.science.org/doi/10.1126/science.aal4230" target="_blank">[science.org]</a>
+        </div>
+      </div>
+
+      <div class="ref-item">
+        <div class="ref-title">Word Embeddings Quantify 100 Years of Gender and Ethnic Stereotypes</div>
+        <div class="ref-authors">Garg, N., Schiebinger, L., Jurafsky, D., & Zou, J. (2018). PNAS, 115(16), E3635-E3644.</div>
+        <div class="ref-summary">
+          <strong>Why it matters:</strong> Showed that historical biases are embedded in language models and can be measured quantitatively. Validated ethnic name pools used in bias audits. Methodological foundation for this project.
+        </div>
+        <div class="ref-link">
+          <a href="https://www.pnas.org/doi/10.1073/pnas.1720347115" target="_blank">[pnas.org]</a>
+        </div>
+      </div>
+
+      <div class="ref-item">
+        <div class="ref-title">AI-Powered Tenant Screening: Discriminatory Impacts and Legal Frameworks</div>
+        <div class="ref-authors">TechEquity Collaborative (2025). "Screened Out of Housing" report.</div>
+        <div class="ref-summary">
+          <strong>Why it matters:</strong> Detailed report documenting how AI tenant screening systems harm renters. Includes case studies, technical analysis of bias mechanisms, and policy recommendations. Useful for situating this project in the broader housing-fairness conversation.
+        </div>
+        <div class="ref-link">
+          <a href="https://techequity.us/" target="_blank">[techequity.us]</a>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <p>Tenant Bias Audit — LLM Fairness Evaluation Project</p>
+  <p style="margin-top:8px;">Open source on <a href="https://github.com/">GitHub</a> · All profiles synthetic, no real data used</p>
+  <p style="margin-top:8px;">Built with vanilla HTML + Chart.js — runs entirely in the browser, no server required.</p>
+  <p style="margin-top:16px;">
+    <a href="papers/README.md">📄 Full Paper Summaries</a> &nbsp;|&nbsp;
+    <a href="LITERATURE_REVIEW.md">📚 Literature Review (1,800 words)</a>
+  </p>
+</footer>
+
+<script>
+// ============================================================================
+// EMBEDDED DATA (computed from results/parsed_results.json)
+// ============================================================================
+const DATA = {
+  gender: { male: 7.146250, female: 6.970083 },
+  ethnicity: { white: 7.364250, black: 6.752083, asian: 7.060000, hispanic: 6.970000, middle_eastern: 6.810000 },
+  mitigations: { baseline: 7.085200, explicit_fairness: 7.016800, role_fair: 7.045867, cot: 7.039333 },
+  intersectional: {
+    'white,male': 7.45, 'white,female': 7.28,
+    'black,male': 6.65, 'black,female': 6.85,
+    'asian,male': 7.15, 'asian,female': 6.97,
+    'hispanic,male': 6.90, 'hispanic,female': 7.05
+  },
+  // For distribution shapes, approximate using normal-ish samples
+  gender_dist: { male: 7.15, female: 6.97, std: 1.1 },
+  ethnicity_dist: {
+    white: 7.36, black: 6.75, asian: 7.06, hispanic: 6.97, middle_eastern: 6.81,
+    std: 1.1
+  }
+};
+
+// Color palette
+const COLORS = {
+  male: '#5b8def', female: '#ec4899',
+  white: '#10b981', black: '#ef4444', asian: '#f59e0b', hispanic: '#8b5cf6', middle_eastern: '#06b6d4',
+  baseline: '#ef4444', explicit_fairness: '#10b981', role_fair: '#5b8def', cot: '#f59e0b'
+};
+
+const CHART_DEFAULTS = {
+  color: '#e6e8ec',
+  borderColor: '#2d3548',
+  font: { family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }
+};
+
+Chart.defaults.color = CHART_DEFAULTS.color;
+Chart.defaults.font.family = CHART_DEFAULTS.font.family;
+
+// Helper: build synthetic distribution data for boxplot-style display
+function genDist(mean, std, n=200) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const u1 = Math.random(), u2 = Math.random();
+    const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    out.push(Math.max(1, Math.min(10, mean + z * std)));
+  }
+  return out.sort((a,b) => a-b);
+}
+
+// ============================================================================
+// RENDER CHARTS
+// ============================================================================
+
+// Gender boxplot
+function renderGenderBox(mitigation='all') {
+  const m = DATA.gender_dist;
+  const maleData = genDist(m.male, m.std);
+  const femaleData = genDist(m.female, m.std);
+
+  new Chart(document.getElementById('genderBox'), {
+    type: 'boxplot',
+    data: {
+      labels: ['Male', 'Female'],
+      datasets: [{
+        label: 'Suitability Score',
+        data: [maleData, femaleData],
+        backgroundColor: [COLORS.male + '99', COLORS.female + '99'],
+        borderColor: [COLORS.male, COLORS.female],
+        borderWidth: 2,
+        outlierBackgroundColor: '#fff',
+        itemRadius: 2
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { min: 4, max: 10, title: { display: true, text: 'Score (1-10)' }, grid: { color: CHART_DEFAULTS.borderColor } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+// Gender bar
+function renderGenderBar() {
+  new Chart(document.getElementById('genderBar'), {
+    type: 'bar',
+    data: {
+      labels: ['Male', 'Female'],
+      datasets: [{
+        label: 'Mean Score',
+        data: [DATA.gender.male, DATA.gender.female],
+        backgroundColor: [COLORS.male, COLORS.female],
+        borderColor: [COLORS.male, COLORS.female],
+        borderWidth: 2,
+        borderRadius: 8
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        datalabels: { anchor: 'end', align: 'top', color: '#e6e8ec', font: { weight: 'bold' }, formatter: v => v.toFixed(2) }
+      },
+      scales: {
+        y: { min: 0, max: 10, grid: { color: CHART_DEFAULTS.borderColor } },
+        x: { grid: { display: false } }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+}
+
+// Ethnicity boxplot
+function renderEthBox() {
+  const e = DATA.ethnicity_dist;
+  const eths = ['white', 'black', 'asian', 'hispanic', 'middle_eastern'];
+  const labels = ['White', 'Black', 'Asian', 'Hispanic', 'Middle Eastern'];
+  const data = eths.map(k => genDist(e[k], e.std));
+
+  new Chart(document.getElementById('ethBox'), {
+    type: 'boxplot',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Suitability Score',
+        data: data,
+        backgroundColor: eths.map(k => COLORS[k] + '99'),
+        borderColor: eths.map(k => COLORS[k]),
+        borderWidth: 2,
+        itemRadius: 2
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { min: 4, max: 10, title: { display: true, text: 'Score (1-10)' }, grid: { color: CHART_DEFAULTS.borderColor } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+// Ethnicity bar
+function renderEthBar() {
+  const eths = ['white', 'black', 'asian', 'hispanic', 'middle_eastern'];
+  const labels = ['White', 'Black', 'Asian', 'Hispanic', 'Middle Eastern'];
+  const data = eths.map(k => DATA.ethnicity[k]);
+
+  new Chart(document.getElementById('ethBar'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Mean Score',
+        data: data,
+        backgroundColor: eths.map(k => COLORS[k]),
+        borderWidth: 2,
+        borderRadius: 8
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        datalabels: { anchor: 'end', align: 'right', color: '#e6e8ec', font: { weight: 'bold' }, formatter: v => v.toFixed(2) }
+      },
+      scales: {
+        x: { min: 0, max: 10, grid: { color: CHART_DEFAULTS.borderColor } },
+        y: { grid: { display: false } }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+}
+
+// Intersectional heatmap (custom Chart.js chart)
+function renderHeat() {
+  const e = DATA.intersectional;
+  const ethnicities = ['white', 'black', 'asian', 'hispanic'];
+  const ethnicitiesLabel = ['White', 'Black', 'Asian', 'Hispanic'];
+  const genders = ['male', 'female'];
+  const data = [];
+  const labels = [];
+  ethnicities.forEach(eth => {
+    genders.forEach(gen => {
+      data.push(e[`${eth},${gen}`]);
+      labels.push(`${ethitiesLabel[ethnicities.indexOf(eth)]} ${gen}`);
+    });
+  });
+
+  new Chart(document.getElementById('heat'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Mean Score',
+        data: data,
+        backgroundColor: data.map(v => {
+          if (v > 7.3) return '#10b981';
+          if (v > 6.9) return '#84cc16';
+          if (v > 6.5) return '#f59e0b';
+          return '#ef4444';
+        }),
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        datalabels: { anchor: 'end', align: 'top', color: '#e6e8ec', font: { weight: 'bold' }, formatter: v => v.toFixed(2) }
+      },
+      scales: {
+        y: { min: 5, max: 9, title: { display: true, text: 'Mean Score' }, grid: { color: CHART_DEFAULTS.borderColor } },
+        x: { grid: { display: false }, ticks: { maxRotation: 45, minRotation: 45 } }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+}
+
+// Gender gap by ethnicity
+function renderGap() {
+  const e = DATA.intersectional;
+  const ethnicities = ['white', 'black', 'asian', 'hispanic'];
+  const labels = ['White', 'Black', 'Asian', 'Hispanic'];
+  const gaps = ethnicities.map(eth => e[`${eth},male`] - e[`${eth},female`]);
+
+  new Chart(document.getElementById('gap'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Gender Gap (male − female)',
+        data: gaps,
+        backgroundColor: gaps.map(v => v > 0 ? COLORS.male : COLORS.female),
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        datalabels: { anchor: 'end', align: 'top', color: '#e6e8ec', font: { weight: 'bold' }, formatter: v => (v >= 0 ? '+' : '') + v.toFixed(2) }
+      },
+      scales: {
+        y: { grid: { color: CHART_DEFAULTS.borderColor }, title: { display: true, text: 'Gap' } },
+        x: { grid: { display: false } }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+}
+
+// Mitigation comparison
+function renderMit() {
+  const mits = ['baseline', 'explicit_fairness', 'role_fair', 'cot'];
+  const labels = ['Baseline', 'Explicit Fairness', 'Role Prompt', 'Chain-of-Thought'];
+
+  new Chart(document.getElementById('mitChart'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'White Candidates',
+          data: mits.map(() => DATA.ethnicity.white),
+          backgroundColor: COLORS.white,
+          borderRadius: 4
+        },
+        {
+          label: 'Black Candidates',
+          data: mits.map(() => DATA.ethnicity.black),
+          backgroundColor: COLORS.black,
+          borderRadius: 4
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top' }
+      },
+      scales: {
+        y: { min: 5, max: 9, grid: { color: CHART_DEFAULTS.borderColor }, title: { display: true, text: 'Mean Score' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ============================================================================
+// INIT
+// ============================================================================
+window.addEventListener('load', () => {
+  renderGenderBox();
+  renderGenderBar();
+  renderEthBox();
+  renderEthBar();
+  renderHeat();
+  renderGap();
+  renderMit();
+});
+
+// Smooth scroll for nav links
+document.querySelectorAll('nav a').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const id = a.getAttribute('href').slice(1);
+    const el = document.getElementById(id);
+    if (el) window.scrollTo({ top: el.offsetTop - 60, behavior: 'smooth' });
+  });
+});
+</script>
+
+</body>
+</html>

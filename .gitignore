@@ -1,0 +1,16 @@
+# Environment
+.env
+__pycache__/
+*.pyc
+*.pyo
+
+# Results (large JSON files)
+results/*.json
+!results/.gitkeep
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
