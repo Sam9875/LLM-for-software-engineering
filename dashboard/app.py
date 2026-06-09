@@ -30,21 +30,25 @@ st.set_page_config(
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_PATH = PROJECT_ROOT / "data" / "profile_sets.json"
 RESULTS_PATH = PROJECT_ROOT / "results" / "parsed_results.json"
+DATA_PATH_V2 = PROJECT_ROOT / "data" / "profile_sets_v2.json"
+RESULTS_PATH_V2 = PROJECT_ROOT / "results" / "parsed_results_v2.json"
 
 
 @st.cache_data
-def load_profiles():
-    if not DATA_PATH.exists():
+def load_profiles(version="v1"):
+    path = DATA_PATH_V2 if version == "v2" else DATA_PATH
+    if not path.exists():
         return None
-    with open(DATA_PATH, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 @st.cache_data
-def load_results():
-    if not RESULTS_PATH.exists():
+def load_results(version="v1"):
+    path = RESULTS_PATH_V2 if version == "v2" else RESULTS_PATH
+    if not path.exists():
         return None
-    with open(RESULTS_PATH, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -88,6 +92,23 @@ st.sidebar.markdown("**Project Info**")
 st.sidebar.markdown("Tests LLMs for bias in tenant evaluation")
 st.sidebar.markdown("4 research questions | 4 mitigation strategies")
 
+st.sidebar.markdown("---")
+st.sidebar.markdown("### Data Version")
+data_version = st.sidebar.radio(
+    "Choose experiment:",
+    ["v2 (with variation)", "v1 (no variation)"],
+    index=0,
+    help="V2: profiles have realistic qualification differences. V1: all profiles identical qualifications."
+)
+data_version = "v2" if "v2" in data_version else "v1"
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Version Info**")
+if data_version == "v2":
+    st.sidebar.markdown("V2: Real qualification variation, anchored prompt, full score range. **Use this for analysis.**")
+else:
+    st.sidebar.markdown("V1: Identical qualifications, vague prompt, score compression. **No bias detected** (but methodologically limited).")
+
 # ============================================================================
 # PAGE: OVERVIEW
 # ============================================================================
@@ -114,11 +135,11 @@ if page == "Overview":
         st.metric("Mitigation Strategies", "4", help="baseline, explicit fairness, role prompt, CoT")
 
     with col3:
-        profiles = load_profiles()
+        profiles = load_profiles(version=data_version)
         st.metric("Profile Sets", len(profiles) if profiles else 0)
 
     with col4:
-        results = load_results()
+        results = load_results(version=data_version)
         n_evals = len([r for r in results if r.get("parse_success")]) * 5 if results else 0
         st.metric("Evaluations", n_evals, help="Total candidate evaluations")
 
@@ -192,7 +213,7 @@ elif page == "Methodology":
     st.markdown("---")
 
     st.markdown("### 1. Profile Generation")
-    profiles = load_profiles()
+    profiles = load_profiles(version=data_version)
     if profiles:
         st.success(f"[OK] {len(profiles)} profile sets loaded")
 
@@ -301,8 +322,8 @@ elif page == "Methodology":
 elif page == "Results Dashboard":
     st.title("Results Dashboard")
 
-    profiles = load_profiles()
-    results = load_results()
+    profiles = load_profiles(version=data_version)
+    results = load_results(version=data_version)
 
     if not results:
         st.warning("No results found. Run the experiment first!")
@@ -505,8 +526,8 @@ elif page == "Results Dashboard":
 elif page == "Statistical Tests":
     st.title("Statistical Tests")
 
-    profiles = load_profiles()
-    results = load_results()
+    profiles = load_profiles(version=data_version)
+    results = load_results(version=data_version)
 
     if not results:
         st.warning("No results found.")
@@ -548,8 +569,8 @@ elif page == "Justification Analysis":
     st.title("Justification Analysis")
     st.markdown("### Detecting Linguistic Bias in LLM Explanations")
 
-    profiles = load_profiles()
-    results = load_results()
+    profiles = load_profiles(version=data_version)
+    results = load_results(version=data_version)
 
     if not results:
         st.warning("No results found.")
