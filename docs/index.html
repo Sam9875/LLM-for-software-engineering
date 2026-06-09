@@ -167,24 +167,24 @@
     <h3>Headline Results (Mock Data Demo)</h3>
     <div class="grid-4" style="margin-top:16px;">
       <div class="metric">
-        <div class="value">+0.18</div>
+        <div class="value">+0.00</div>
         <div class="label">Score gap: Male − Female</div>
-        <div class="sub">7.15 vs 6.97 (out of 10)</div>
+        <div class="sub">8.92 vs 8.92 (out of 10)</div>
       </div>
       <div class="metric">
-        <div class="value">+0.61</div>
+        <div class="value">+0.01</div>
         <div class="label">Score gap: White − Black</div>
-        <div class="sub">7.36 vs 6.75 (out of 10)</div>
+        <div class="sub">8.93 vs 8.91 (out of 10)</div>
       </div>
       <div class="metric">
-        <div class="value">3,000</div>
-        <div class="label">Total evaluations</div>
-        <div class="sub">50 sets × 4 mitigations × 3 runs</div>
+        <div class="value">80</div>
+        <div class="label">Real API evaluations</div>
+        <div class="sub">10 sets × 4 mitigations × 2 runs</div>
       </div>
       <div class="metric">
-        <div class="value">-0.07</div>
-        <div class="label">Best mitigation effect</div>
-        <div class="sub">explicit_fairness prompt</div>
+        <div class="value">p=1.00</div>
+        <div class="label">Gender bias significance</div>
+        <div class="sub">NO significant difference detected</div>
       </div>
     </div>
   </section>
@@ -195,27 +195,27 @@
 
     <div class="grid-2">
       <div class="card">
-        <h3 style="color:var(--bad);">Finding 1: Gender bias detected</h3>
-        <p>Male candidates received scores 0.18 points higher than female candidates (7.15 vs 6.97), despite identical qualifications.</p>
-        <p style="margin-top:12px;"><span class="pill bad">p &lt; 0.05</span> &nbsp; <span class="pill warn">Small effect (d ≈ 0.15)</span></p>
+        <h3 style="color:var(--good);">Finding 1: No gender bias detected</h3>
+        <p>Male and female candidates received identical mean scores (8.92 vs 8.92), with Mann-Whitney U test showing p = 1.0000. The model gave the same scores to both groups across 320 evaluations.</p>
+        <p style="margin-top:12px;"><span class="pill good">p = 1.0000</span> &nbsp; <span class="pill good">No effect (d = 0.000)</span></p>
       </div>
       <div class="card">
-        <h3 style="color:var(--bad);">Finding 2: Racial bias detected</h3>
-        <p>White-associated names received scores 0.61 points higher than Black-associated names (7.36 vs 6.75) — over 3× the gender gap.</p>
-        <p style="margin-top:12px;"><span class="pill bad">p &lt; 0.001</span> &nbsp; <span class="pill bad">Medium effect (d ≈ 0.50)</span></p>
+        <h3 style="color:var(--good);">Finding 2: No racial bias detected</h3>
+        <p>White and Black-associated names received nearly identical scores (8.93 vs 8.91, gap = 0.01). Kruskal-Wallis H test showed p = 0.7476, well above significance threshold.</p>
+        <p style="margin-top:12px;"><span class="pill good">p = 0.7476</span> &nbsp; <span class="pill good">Negligible effect</span></p>
       </div>
       <div class="card">
-        <h3 style="color:var(--warn);">Finding 3: Intersectional patterns</h3>
-        <p>The combination of race and gender produces different patterns than either alone. Black male candidates showed the largest negative deviation in baseline conditions.</p>
+        <h3 style="color:var(--warn);">Finding 3: Score compression observed</h3>
+        <p>All scores clustered in 7-10 range (mean 8.87, std 0.35). The model is reluctant to give anyone a low score. This is a form of "leniency bias" that hides smaller demographic differences.</p>
       </div>
       <div class="card">
-        <h3 style="color:var(--good);">Finding 4: Mitigations help — but don't eliminate</h3>
-        <p>Explicit fairness instructions ("Do not consider race, gender, or ethnicity") reduced the mean score variance, but did not fully eliminate demographic differences.</p>
+        <h3 style="color:var(--good);">Finding 4: Model acknowledged equivalence</h3>
+        <p>In 100% of cases, the model's justifications explicitly noted that candidates had identical qualifications. The model appears to "try" to be fair by recognizing and stating the equivalence.</p>
       </div>
     </div>
 
-    <div class="callout warn" style="margin-top:24px;">
-      <strong>Important:</strong> The above numbers are from <em>mock data</em> (simulated LLM responses for demo purposes). Run the real experiment with `python scripts/run_experiment.py` to get actual results from Claude/GPT.
+    <div class="callout good" style="margin-top:24px;">
+      <strong>Real results from the API:</strong> The model (claude-opus-4.8 via third-party endpoint) gave essentially identical mean scores to all demographic groups. The model explicitly acknowledged in its justifications that the candidates had identical qualifications. This is a positive finding for the model's behavior, though it raises a separate question: was the model <em>actually</em> being fair, or was it just giving everyone the same high score?
     </div>
   </section>
 
@@ -479,23 +479,32 @@
 
 <script>
 // ============================================================================
-// EMBEDDED DATA (computed from results/parsed_results.json)
+// EMBEDDED DATA (REAL experiment results from claude-opus-4.8 via custom endpoint)
 // ============================================================================
 const DATA = {
-  gender: { male: 7.146250, female: 6.970083 },
-  ethnicity: { white: 7.364250, black: 6.752083, asian: 7.060000, hispanic: 6.970000, middle_eastern: 6.810000 },
-  mitigations: { baseline: 7.085200, explicit_fairness: 7.016800, role_fair: 7.045867, cot: 7.039333 },
+  gender: { male: 8.91875, female: 8.91875 },
+  ethnicity: { white: 8.9250, black: 8.9125, asian: 8.9250, hispanic: 8.9250, middle_eastern: 8.9250 },
+  mitigations: { baseline: 8.900, explicit_fairness: 8.875, role_fair: 8.95, cot: 8.90 },
   intersectional: {
-    'white,male': 7.45, 'white,female': 7.28,
-    'black,male': 6.65, 'black,female': 6.85,
-    'asian,male': 7.15, 'asian,female': 6.97,
-    'hispanic,male': 6.90, 'hispanic,female': 7.05
+    'white,male': 8.925, 'white,female': 8.925,
+    'black,male': 8.9125, 'black,female': 8.9125,
+    'asian,male': 8.925, 'asian,female': 8.925,
+    'hispanic,male': 8.925, 'hispanic,female': 8.925
   },
-  // For distribution shapes, approximate using normal-ish samples
-  gender_dist: { male: 7.15, female: 6.97, std: 1.1 },
+  // For distribution shapes - real std from data
+  gender_dist: { male: 8.92, female: 8.92, std: 0.35 },
   ethnicity_dist: {
-    white: 7.36, black: 6.75, asian: 7.06, hispanic: 6.97, middle_eastern: 6.81,
-    std: 1.1
+    white: 8.93, black: 8.91, asian: 8.93, hispanic: 8.93, middle_eastern: 8.93,
+    std: 0.35
+  },
+  meta: {
+    total_evals: 80,
+    sets: 10,
+    runs_per_set: 2,
+    mitigations: 4,
+    model: 'claude-opus-4.8',
+    gender_p: 1.0000,
+    ethnicity_p: 0.7476
   }
 };
 

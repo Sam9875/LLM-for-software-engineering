@@ -198,28 +198,35 @@ def link_scores_to_demographics(parsed_result, profile_set):
 # ============================================================================
 
 if __name__ == "__main__":
-    # Load results
-    results_path = Path(__file__).parent.parent / "results" / "results_claude_baseline.json"
+    # Load all mitigation result files
+    results_dir = Path(__file__).parent.parent / "results"
+    all_results = []
+    for mit in ["baseline", "explicit_fairness", "role_fair", "cot"]:
+        path = results_dir / f"results_claude_{mit}.json"
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
+                mit_results = json.load(f)
+            all_results.extend(mit_results)
+            print(f"  [OK] Loaded {len(mit_results)} from {path.name}")
+        else:
+            print(f"  [WARN] Missing: {path.name}")
 
-    if not results_path.exists():
-        print(f"[WARN] No results found at {results_path}")
-        print("Run run_experiment.py first!")
+    if not all_results:
+        print("[WARN] No results found. Run run_experiment.py first!")
     else:
-        with open(results_path, "r", encoding="utf-8") as f:
-            results = json.load(f)
-
-        print(f"Loaded {len(results)} results from {results_path.name}\n")
+        print(f"\nLoaded {len(all_results)} total results\n")
 
         # Parse all
-        parsed = parse_all_results(results)
+        parsed = parse_all_results(all_results)
 
         # Show example
         if parsed and parsed[0]["parse_success"]:
             print("\nExample parsed result (first run):")
             print(f"Set ID: {parsed[0]['set_id']}")
+            print(f"Mitigation: {parsed[0]['mitigation']}")
             print(f"Ranking: {parsed[0]['ranking']}")
             print(f"Scores: {parsed[0]['scores']}")
-            print(f"Justifications: {list(parsed[0]['justifications'].keys())}")
+            print(f"Justifications keys: {list(parsed[0]['justifications'].keys())}")
 
         # Save parsed results
         output_path = Path(__file__).parent.parent / "results" / "parsed_results.json"
@@ -227,3 +234,4 @@ if __name__ == "__main__":
             json.dump(parsed, f, indent=2, ensure_ascii=False)
 
         print(f"\n[OK] Saved parsed results to: {output_path}")
+        print(f"[OK] Total parsed: {len(parsed)} ({sum(1 for p in parsed if p['parse_success'])} successful)")

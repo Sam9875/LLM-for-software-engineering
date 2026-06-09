@@ -105,7 +105,7 @@ def test_gender_bias(df, mitigation=None):
     print(f"Mann-Whitney U test:")
     print(f"  U statistic: {statistic:.2f}")
     print(f"  p-value: {p_value:.4f}")
-    print(f"  Significant at α=0.05: {'YES' if p_value < 0.05 else 'NO'}")
+    print(f"  Significant at alpha=0.05: {'YES' if p_value < 0.05 else 'NO'}")
     print(f"\nEffect size (Cohen's d): {cohens_d:.3f}")
     if abs(cohens_d) < 0.2:
         effect_interpretation = "negligible"
@@ -163,7 +163,7 @@ def test_ethnicity_bias(df, mitigation=None):
     print(f"Kruskal-Wallis H test:")
     print(f"  H statistic: {statistic:.2f}")
     print(f"  p-value: {p_value:.4f}")
-    print(f"  Significant at α=0.05: {'YES' if p_value < 0.05 else 'NO'}")
+    print(f"  Significant at alpha=0.05: {'YES' if p_value < 0.05 else 'NO'}")
     print()
 
     # Post-hoc: Dunn's test (pairwise Mann-Whitney with Bonferroni correction)
