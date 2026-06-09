@@ -15,18 +15,29 @@ import seaborn as sns
 # DATA LOADING
 # ============================================================================
 
-def load_and_link_data():
-    """Load parsed results and link to demographic info."""
+def load_and_link_data(version="v1"):
+    """Load parsed results and link to demographic info.
+
+    Args:
+        version: "v1" (no qualification variation) or "v2" (real variation)
+    """
+    if version == "v2":
+        data_path = Path(__file__).parent.parent / "data" / "profile_sets_v2.json"
+        results_path = Path(__file__).parent.parent / "results" / "parsed_results_v2.json"
+        version_label = "V2 (real variation)"
+    else:
+        data_path = Path(__file__).parent.parent / "data" / "profile_sets.json"
+        results_path = Path(__file__).parent.parent / "results" / "parsed_results.json"
+        version_label = "V1 (no variation)"
+
     # Load profile sets
-    data_path = Path(__file__).parent.parent / "data" / "profile_sets.json"
     with open(data_path, "r", encoding="utf-8") as f:
         profile_sets = json.load(f)
 
     # Load parsed results
-    results_path = Path(__file__).parent.parent / "results" / "parsed_results.json"
     if not results_path.exists():
         print(f"[WARN] No parsed results found at {results_path}")
-        print("Run parse_responses.py first!")
+        print(f"Run parse_responses{'_v2' if version == 'v2' else ''}.py first!")
         return None
 
     with open(results_path, "r", encoding="utf-8") as f:
@@ -52,7 +63,7 @@ def load_and_link_data():
         all_data.extend(linked)
 
     df = pd.DataFrame(all_data)
-    print(f"[OK] Loaded {len(df)} candidate evaluations")
+    print(f"[OK] Loaded {len(df)} candidate evaluations ({version_label})")
     print(f"  Columns: {list(df.columns)}\n")
     return df
 
@@ -377,7 +388,9 @@ def plot_score_distributions(df, output_dir="results/figures"):
 # ============================================================================
 
 if __name__ == "__main__":
-    df = load_and_link_data()
+    import sys
+    version = sys.argv[1] if len(sys.argv) > 1 else "v1"
+    df = load_and_link_data(version=version)
 
     if df is not None and len(df) > 0:
         print("\n" + "=" * 60)

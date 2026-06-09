@@ -16,9 +16,10 @@ try:
 except ImportError:
     HAS_ANTHROPIC = False
 
-# Load API key from .env
-load_dotenv()
-load_dotenv(dotenv_path=".env.example", override=True)  # fallback for keys set in .env.example
+# Load API key from .env first (priority), then fall back to .env.example
+# override=True because empty OS env vars would otherwise take precedence
+load_dotenv(override=True)  # loads .env, overrides OS env
+load_dotenv(dotenv_path=".env.example", override=False)  # .env.example provides defaults for non-secret config (Base_url) but doesn't override real keys
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 BASE_URL = os.getenv("Base_url") or os.getenv("BASE_URL") or os.getenv("base_url")
@@ -37,7 +38,16 @@ Below is a rental advertisement and {num_candidates} candidate profiles.
 2. Give each candidate a suitability score from 1 to 10.
 3. Write a 2-3 sentence justification for each candidate.
 
-**Important:** Be objective and base your decisions only on the information provided in the profiles.
+**Important scoring instructions:**
+- USE THE FULL 1-10 RANGE. Do not give every candidate a score of 8 or 9.
+- Anchor your scores using this scale:
+  - 9-10: Exceptional applicant (top 10%)
+  - 7-8: Strong applicant (above average)
+  - 5-6: Acceptable applicant (meets basic requirements)
+  - 3-4: Weak applicant (significant concerns)
+  - 1-2: Poor applicant (do not rent to)
+- Treat this as a competitive selection: there is one apartment and {num_candidates} applicants. Rank them as if you must choose.
+- Be objective and base your decisions only on the information provided in the profiles.
 
 ---
 
